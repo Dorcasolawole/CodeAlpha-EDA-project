@@ -1,0 +1,150 @@
+1. Data Quality
+
+Question: Is the data complete and consistent?
+-- Missing values in key columns
+SELECT
+  SUM(CASE WHEN Customer_ID IS NULL THEN 1 ELSE 0 END) AS null_customer,
+  SUM(CASE WHEN Category    IS NULL THEN 1 ELSE 0 END) AS null_category,
+  SUM(CASE WHEN Postal_Code IS NULL THEN 1 ELSE 0 END) AS null_postal,
+  SUM(CASE WHEN discount    IS NULL THEN 1 ELSE 0 END) AS null_discount
+FROM superstore;
+
+-- Shipping date before order date?
+SELECT COUNT(*) AS invalid_shipping_date FROM superstores WHERE ship_date < order_date;
+
+-- Value ranges
+SELECT MIN(sales) min_sales, MAX(sales) max_sales, AVG(sales) avg_sales,
+       MIN(profit) min_profit, MAX(profit) max_profit,
+       MIN(discount) min_discount, MAX(discount) max_discount
+FROM superstore;
+
+-- Duplicates
+SELECT Order_ID, Product_ID, COUNT(*) AS n
+FROM superstore
+GROUP BY Order_ID, Product_ID
+HAVING COUNT(*) > 1;
+
+-- Headline numbers
+SELECT ROUND(SUM(sales),0) AS total_sales,
+       ROUND(SUM(profit),0) AS total_profit,
+       COUNT(DISTINCT Order_ID) AS orders
+FROM superstore;
+
+Findings:
+9,994 rows and no missing values in any column.
+Order dates run from 2014-01-03 to 2017-12-30. No order ships before it is placed.
+Total sales $2,297,201, total profit $286,397, 5,009 distinct orders.
+Sales range from $0.44 to $22,638, profit from -$6,600 to +$8,400, discount from 0% to 80%.
+The duplicate check returns 16 rows (8 Order ID + Product ID pairs appearing twice). 
+Only 1 row is a full duplicate once Row ID is ignored, so the rest are likely genuine repeat lines on the same order and were kept.
+
+
+2. Performance by Category, Region and Sub-Category
+
+Question: Which categories, regions and sub-categories make or lose money?
+
+-- Category sales, profit and margin
+SELECT Category,
+       ROUND(SUM(sales),0)  AS sales,
+       ROUND(SUM(profit),0) AS profit,
+       ROUND(SUM(profit)/SUM(sales)*100,1) AS margin_pct
+FROM superstore
+GROUP BY Category
+ORDER BY profit DESC;
+
+-- Region sales and profit
+SELECT Region, ROUND(SUM(sales),0) AS sales, ROUND(SUM(profit),0) AS profit
+FROM superstore
+GROUP BY Region
+ORDER BY profit DESC;
+
+-- Sub-category profit
+SELECT Sub_Category, ROUND(SUM(profit),0) AS profit
+FROM superstore
+GROUP BY Sub_Category
+ORDER BY profit ASC;
+
+Findings:
+Furniture sells nearly as much as Technology but earns only a 2.5% margin.
+West is the strongest region in both sales and profit. Central has the weakest margin (7.9%) despite being second in sales.
+Three sub-categories lose money: Tables (-$17,725), Bookcases (-$3,473) and Supplies (-$1,189).
+
+
+3. Trends Over Time
+
+Question: How do sales change by year and month?
+
+SELECT YEAR(order_date) AS yr, MONTH(order_date) AS mth,
+       ROUND(SUM(sales),0) AS sales
+FROM superstore
+GROUP BY YEAR(order_date), MONTH(order_date)
+ORDER BY yr, mth;
+
+Findings:
+Yearly sales: 2014 $484K, 2015 $471K, 2016 $609K, 2017 $733K. Sales dipped slightly in 2015, then grew strongly.
+Sales peak in November ($352K) and December ($325K), with September ($308K) also strong.
+
+
+4. Discounts and Profit
+
+Question: Does a higher discount reduce profit?
+-- Average profit by discount level
+SELECT discount,
+       COUNT(*) AS lines,
+       ROUND(AVG(profit),2) AS avg_profit
+FROM superstore
+GROUP BY discount
+ORDER BY discount;
+
+-- How many order lines lose money?
+SELECT SUM(CASE WHEN profit < 0 THEN 1 ELSE 0 END) AS loss_lines,
+       COUNT(*) AS total_lines
+FROM superstore;
+
+-- Do loss-making sub-categories have heavier discounts?
+SELECT Sub_Category, ROUND(AVG(discount),2) AS avg_discount,
+       ROUND(SUM(profit),0) AS profit
+FROM superstore
+GROUP BY Sub_Category
+ORDER BY profit;
+
+Findings:
+Average profit per line is positive up to a 20% discount and negative from 30% upward. (Not perfectly smooth: 60% is less negative than 40-50%.)
+1,871 of 9,994 lines (18.7%) lose money.
+1,393 lines (about 14%) carry a discount of 30% or more.
+Discounting partly explains the weak sub-categories. Tables (26% average discount) and Bookcases (21%) are discounted more heavily than most.
+But Supplies loses money at only an 8% average discount,and Binders earn $30K at a 37% average discount, so discount is not the whole story.
+
+5. Customers and Segments
+
+Question: Who are the top customers, and which segment contributes most?
+
+-- Top 10 customers by sales
+SELECT TOP 10 Customer_Name, ROUND(SUM(sales),0) AS sales,
+       ROUND(SUM(profit),0) AS profit
+FROM superstore
+GROUP BY Customer_Name
+ORDER BY sales DESC;
+
+-- Segment contribution
+SELECT Segment, ROUND(SUM(sales),0) AS sales, ROUND(SUM(profit),0) AS profit
+FROM superstores
+GROUP BY Segment;
+
+Finding:
+Top customer by sales is Sean Miller ($25,043), but he generated a $1,981 loss.
+Ken Lonsdale ($14,175 sales) earned only $807. Tamara Chand ($19,052 sales) earned $8,981.
+Consumer is the largest segment: $1.16M sales, $134K profit. Corporate: $706K sales, $92K profit.
+Home Office: $430K sales, $60K profit.
+
+
+Summary of Key Findings:
+
+Furniture sells $742K but earns only a 2.5% margin (Technology: 17.4%).
+Tables, Bookcases and Supplies lose money.
+Central region has the weakest margin (7.9%); West is strongest.
+Discounts of 30% or more turn average line profit negative. 18.7% of lines lose money.
+Sales peak in November and December, and 2017 was the strongest year ($733K).
+The biggest customer by sales (Sean Miller) was unprofitable.
+
+
